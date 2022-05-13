@@ -1,0 +1,97 @@
+---
+title: "HW2"
+author: "CAN GİZER"
+date: "5/13/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+### SETTING WD AND INSTALING REQUIRED PACKAGES
+
+```{r setup}
+library(ggplot2)
+library(forecast)
+library(data.table)
+library(GGally)
+library(ggcorrplot)
+library(zoo)
+getwd()
+setwd("/Users/iremgizer/Desktop")
+```
+### READING DATA AND MANIPULATING IT 
+```{r read}
+hw2.data<-data.table(read.csv("IE360_Spring22_HW2_data.csv"))
+str(hw2.data)
+colnames(hw2.data) <- c("Quarter","UGS","RNUV","NLPG","PU","PG","NUGV","NDGV","GNPA","GNPC","GNP")
+hw2.data$Quarter <- as.yearqtr(hw2.data$Quarter,"%Y_Q%q")
+
+```
+CSV data has been taken as a data table, appropriate table names are given. For their explanations, the viewer may check below. Quarters have also been taken as dates to easier workflow. 
+UGS: Unleaded gasoline sale in a given quarter,
+RNUV: An index indicating the rate of new unleaded gasoline using vehicles being added to the traffic in a quarter,
+NLPG: Number of LPG using vehicles in the traffic,
+PU: Average price (adjusted with an index) of a liter of unleaded gasoline in a quarter,
+PG: Average price (adjusted with an index) of a liter of diesel gasoline in a quarter,
+NUGV: Number of unleaded gasoline using vehicles in the traffic,
+NDGV: Number of diesel gasoline using vehicles in the traffic (per 1000 people),
+GNPA: Agriculture component of Gross National Product (adjusted with an index),
+GNPC: Commerce component of Gross National Product (adjusted with an index),
+GNP: Grand total for GNP (agriculture, commerce and other components total).
+
+```{r plot, echo=FALSE}
+ggplot(data=hw2.data[1:28], aes(y=UGS, x=Quarter))+geom_point()+
+  geom_line()+ ggtitle('UNLEADED GASOLINE SALES BY QUARTER')
+```
+As one can see, the data is clearly not stationary. There is a decreasing trend and a strong seasonality. First quarters are always having lower consumption than yearly average and in third quarters the consumption increases sharply.
+```{r acf, echo=FALSE}
+acf(hw2.data$UGS,na.action=na.pass)
+```
+As one can see, first and fourth lags are passing over the ACF limit. Eight lag is passing over the threshold as well, albeit incrementally. 
+```{r define}
+hw2.data$trend <-1:32
+hw2.data$QuarterlySeasonality <- rep(1:4,8)
+hw2.data$lagged_1 <- c(NA,hw2.data$UGS[1:31])
+hw2.data$lagged_4 <- c(rep(NA,4),hw2.data$UGS[1:28])
+hw2.data$lagged_8 <- c(rep(NA,8),hw2.data$UGS[1:24])
+
+```
+Trend and seasonality have been defined as well as lagged values of UGS. 1,4,8 lags are of interest as mentioned above.
+```{r models}
+lm1 <- lm(UGS~.,hw2.data)
+summary(lm1)
+
+ggpairs(hw2.data[,2:16])
+lm2 <- lm(UGS~NLPG+PU+PG+NUGV+NDGV+GNPA+lagged_1+lagged_4+lagged_8,hw2.data)
+summary(lm2)
+
+lm3 <- lm(UGS~GNPA+lagged_4+trend,hw2.data)
+summary(lm3)
+lm4 <- lm(UGS~GNPA+lagged_1+lagged_4+lagged_8,hw2.data)
+summary(lm4)
+lm5 <- lm(UGS~GNPA+PU+lagged_4,hw2.data)
+summary(lm5)
+lm6 <- lm(UGS~GNPA+PU+lagged_4+NLPG+NUGV,hw2.data)
+summary(lm6)
+lm7 <- lm(UGS~GNPA+PU+lagged_4+NUGV,hw2.data)
+summary(lm7)
+lm8 <- lm(UGS~GNPA+PU+lagged_4+PG,hw2.data)
+summary(lm8)
+```
+Eight models have been identified. Briefly, first one includes every regressor, trend and seasonality defined. Second one includes every regressor that was significant in relation to UGS, when ggpairs() was checked. For the other ones only the ones that were the most correlated have been checked. After all these the fifth model whose regressors include GNPA,PU and lagged_4 have been selected, since it has the second highest adjusted R^2 and all its regressors were significant. The highest adjusted R^2 was with the first model, however it used many regressors some of which are not in relation with UGS, which will make good predictions about the future. As we know, using spruious regressors may increse our adjusted R^2 but they are not reliable predictors. 
+```{r residuals, echo=FALSE}
+checkresiduals(lm5)
+```
+The residuals seem random. The ACF also shows that they are not autocorrelated. They also seem like their mean is zero and Breusch-Godfrey test yields a p-value = 0.4989, which result in an inability to reject null hypothesis. Besides the variance of residuals are not increasing over time. All these observations increases the confidence to claim that our residuals are stationary.
+```{r predict}
+hw2.data[,predicted:=predict(lm5,tmp)]
+hw2.data[,residual:=UGS-predicted]
+hw2.data$predicted[28:32]
+```
+```{r plot,echo=FALSE}
+ggplot(hw2.data ,aes(x=Quarter)) +
+  geom_line(aes(y=UGS,color='real')) + 
+  geom_line(aes(y=predicted,color='predicted'))+
+ggtitle('ACTUAL VS. PREDICTED VALUES')
+```
