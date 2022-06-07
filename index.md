@@ -5,5 +5,5 @@
 ### Homework 2
 [HTML](https://bu-ie-360.github.io/spring22-cangizer/hw2.html) and [RMD](https://github.com/BU-IE-360/spring22-cangizer/blob/gh-pages/hw2.Rmd) files can be reached here. 
 ### Homework 3
-[HTML](https://bu-ie-360.github.io/spring22-cangizer/PROJECT_360_C_R_C (2).html) and [RMD](https://github.com/BU-IE-360/spring22-cangizer/blob/gh-pages/SON (2).Rmd) files can be reached here. 
+[HTML](https://bu-ie-360.github.io/spring22-cangizer/PROJECT_360.html) and [RMD](https://github.com/BU-IE-360/spring22-cangizer/blob/gh-pages/PROJECT_360.Rmd) files can be reached here. 
 [link] (https://moodle.boun.edu.tr/login/)
