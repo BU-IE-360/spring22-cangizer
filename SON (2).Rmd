@@ -1,0 +1,479 @@
+---
+title: "IE 360"
+author: "Refika Kalyoncu, Can Gizer, Ceren Dündar"
+
+output:
+  html_document:
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+    number_sections: yes
+    code_folding: hide
+    theme: readable
+subtitle: Group Project
+date: '2022-06-07'
+---
+
+# INTRODUCTION	
+
+
+The companies competing in energy distribution market are highly competitive. All the companies are selling the same undifferentiated product and the price that they charge their customers is fixed. This market behaves similar to a perfectly competitive market. The only exception being that the companies competing aren’t buying the electricity on the same price. The price is determined by energy consumption and prediction. During the timeslots where production is high and consumption is low, the prices tend to fall. By building time series models and trying to predict consumer behavior and energy production the distributor companies are trying to maximize their profits. Thus, the distributor companies are incentivized to make adequate time series models and forecasts. The aim of this project is showing parallels to what the energy distributors are doing. The aim is to predict energy production of a solar energy producer. The scope is, however, much smaller than what those distributors are doing, but in terms of building blocks, nothing drastic is different from how those energy distributors are modeling.\
+The approach to tackle the problem, is explained in detail on the approach part and in the RMD file shared. But the model that the group decided on is an ARIMA model with 2 autoregressive variables and 1 moving average error model. This model is justifiable since, the energy production is highly correlated with the previous days. That is because the weather is not changing drastically on the area and thus the panels can operate similarly with the previous days.\
+The production data is given hourly and as expected the production is 0 when the sun sets. Additionally, the production is at its daily maximum around noon when the sun exposure is at its highest. One additional thing to note is, the maximum daily production is increasing up to around 40 GW and then stays relatively constant. That’s the level the plant is working at its maximum capacity so to speak and operates at its optimum for some time. Then some decline can be observed in the data. That’s probably because the government has the authority to regulate individual plant’s production to stabilize energy prices on the energy distributor- producer market. Additionally, there are four possible regressors measured for 9 different longitude and latitude points. These are temperature, relative humidity, radiation and total cloud cover.  \
+
+# APPROACH
+
+As mentioned, the production is increasing up to a limit and then decreases due to government oversight. If a model was to be drawn from this raw data, the learnt model will be misleading. Furthermore, the data is hourly and the hourly data if not dealt with, can skew to the predictions as well. To overcome these hurdles, the group has decided to manipulate the data. A new variable utilization is added to the model. First the maximum production on sliding window is found for every hour, and then the production data for a given hour has been divided to maximum production of the sliding window. This approach smoothed the data. The assumption the group embraced was, the maximum production will not change drastically with every slide. Although this assumption is a strong one, a careful examination of the data will show no drastic increase or decrease. The models are fitted using this utilization variable. \
+Afterwards several time series regression models have been tested. To check them individually, the reader is advised to check the code. The one that is selected as a time series candidate model is the one that has 72, 73 hours of lags and average of all the regressors, which had a R^2 coefficient of 0.80. The residuals for this seemed normally distributed with 0 mean, constant variance, and no autocorrelation of residuals. To further smooth the prediction, the negative predicted utilizations are set to 0. \
+The second approach was a time series analysis one. At the beginning, the data has been made stationary, and the auto.arima() function has been set. The model came out of it is ARIMA(2,0,1). Note that, the differencing is done prior to using auto.arima(). The differencing that was implemented was a single differencing with 72, since the prediction task was to be made 72 hours ahead.\
+
+
+
+
+
+## Libraries
+The necessary libraries are added. 
+
+```{r setup, include=FALSE}
+require(data.table)
+library(stringr)
+require(xlsx)
+library(lubridate)
+library(zoo)
+library(ggplot2)
+library(RcppRoll)
+library(GGally)
+library(skimr)
+library(forecast)
+library(dplyr)
+library(urca)
+library(Metrics)
+```
+
+
+## Uploading Data 
+The data is uploaded and updated each day for the corresponding prediction. 
+```{r}
+data_path='C:/Users/HP/Desktop/IE360/23May/2022-05-23_production.csv'
+production=fread(data_path)
+production$date <- as.Date(production$date)
+production[,trend:=1:.N]
+data_path1='C:/Users/HP/Desktop/IE360/23May/2022-05-23_weather.csv'
+inputs=fread(data_path1)
+```
+
+
+
+## Dcasting and Merging with production
+The data is dcasted to change so that each different lat and lon value for the same date and hour are avaliable in a single row. 
+```{r}
+ggplot(production, aes(y=production, x=trend))+geom_line()
+str(production)
+tmp=copy(production)
+ff=dcast(inputs,date+hour~variable+lat+lon,value.var="value")
+
+```
+
+## The database which includes the NA production values
+```{r}
+result=merge(ff, production,on="date",all = TRUE)
+result$maxPro<-rep(NA,nrow(result))
+result$dayHour<-paste(result$date, "-", result$hour)
+
+```
+
+
+```{r}
+merged <- merge(ff, production,on="date")
+merged$dayHour<-paste(merged$date, "-", merged$hour)
+merged$maxPro<-rep(0,nrow(merged))
+
+```
+
+## Finding The max function to find the max Production on last 30 days 
+```{r}
+
+finding.max <- function(list) {
+  maxi=0
+  for(i in 1:31){
+    if(list[i]$production>=maxi){
+      maxi=list[i]$production
+    }
+  }
+  ans=maxi
+  maxi=0
+  return(ans)
+}
+```
+
+
+## Creating 24 different data table for ease of implementation
+
+```{r}
+
+merged0=merged[merged$hour==0, ] 
+merged1=merged[merged$hour==1, ] 
+merged2=merged[merged$hour==2, ] 
+merged3=merged[merged$hour==3, ] 
+merged4=merged[merged$hour==4, ] 
+merged5=merged[merged$hour==5, ] 
+merged6=merged[merged$hour==6, ] 
+merged7=merged[merged$hour==7, ] 
+merged8=merged[merged$hour==8, ] 
+merged9=merged[merged$hour==9, ] 
+merged10=merged[merged$hour==10, ] 
+merged11=merged[merged$hour==11, ] 
+merged12=merged[merged$hour==12, ] 
+merged13=merged[merged$hour==13, ] 
+merged14=merged[merged$hour==14, ] 
+merged15=merged[merged$hour==15, ] 
+merged16=merged[merged$hour==16, ] 
+merged17=merged[merged$hour==17, ] 
+merged18=merged[merged$hour==18, ] 
+merged19=merged[merged$hour==19, ] 
+merged20=merged[merged$hour==20, ] 
+merged21=merged[merged$hour==21, ] 
+merged22=merged[merged$hour==22, ] 
+merged23=merged[merged$hour==23, ]
+```
+
+## Copying the production value to Max Production column for first 30 Days
+While we are looking for the max production we are searching for the max production in last 30 days but since the first 30 day doesn't have the history we prefered to copy the production value directly as max. 
+```{r}
+for(i in 1:720){
+  merged[i]$maxPro=merged[i]$production
+}
+```
+
+## Finding the Max Production in last 30 days
+Since all different hours have different patterns we prefered to assign the max production value in last 30 days and same hour. 
+```{r}
+for(i in 31:(nrow(merged)/24)){
+    lower=i-30
+    upper=i
+    merged[merged0[i]$trend]$maxPro=finding.max(merged0[lower:upper])
+    merged[merged1[i]$trend]$maxPro=finding.max(merged1[lower:upper])
+    merged[merged2[i]$trend]$maxPro=finding.max(merged2[lower:upper])
+    merged[merged3[i]$trend]$maxPro=finding.max(merged3[lower:upper])
+    merged[merged4[i]$trend]$maxPro=finding.max(merged4[lower:upper])
+    merged[merged5[i]$trend]$maxPro=finding.max(merged5[lower:upper])
+    merged[merged6[i]$trend]$maxPro=finding.max(merged6[lower:upper])
+    merged[merged7[i]$trend]$maxPro=finding.max(merged7[lower:upper])
+    merged[merged8[i]$trend]$maxPro=finding.max(merged8[lower:upper])
+    merged[merged9[i]$trend]$maxPro=finding.max(merged9[lower:upper])
+    merged[merged10[i]$trend]$maxPro=finding.max(merged10[lower:upper])
+    merged[merged11[i]$trend]$maxPro=finding.max(merged11[lower:upper])
+    merged[merged12[i]$trend]$maxPro=finding.max(merged12[lower:upper])
+    merged[merged13[i]$trend]$maxPro=finding.max(merged13[lower:upper])
+    merged[merged14[i]$trend]$maxPro=finding.max(merged14[lower:upper])
+    merged[merged15[i]$trend]$maxPro=finding.max(merged15[lower:upper])
+    merged[merged16[i]$trend]$maxPro=finding.max(merged16[lower:upper])
+    merged[merged17[i]$trend]$maxPro=finding.max(merged17[lower:upper])
+    merged[merged18[i]$trend]$maxPro=finding.max(merged18[lower:upper])
+    merged[merged19[i]$trend]$maxPro=finding.max(merged19[lower:upper])
+    merged[merged20[i]$trend]$maxPro=finding.max(merged20[lower:upper])
+    merged[merged21[i]$trend]$maxPro=finding.max(merged21[lower:upper])
+    merged[merged22[i]$trend]$maxPro=finding.max(merged22[lower:upper])
+                                          
+  
+}
+```
+
+
+## Utilization
+
+The utilization of each hour is calculated by the diving the production level to max production in last 30 days in same hour.
+```{r}
+merged$utilization<-ifelse(merged$maxPro==0,0,merged$production/merged$maxPro*100)
+
+
+```
+
+
+## Adding Utilization column to "data to be predicted" data to be able to rbind with the current data
+
+As we merged production and weather csv files we prefered to erase the ones with NA value. However to be able to predict data we have to apply same column opperations to the "to be predicted" rows as well so we bind these data to the current table  
+```{r}
+result$utilization<-rep(NA,nrow(result))
+deneme2=rbind(merged,result[(nrow(result)-(7*24)+1):(nrow(result)-(4*24))])
+```
+
+
+## Lag 72 Max Production
+since we wont be able to calculate last 30 days' max production for the last 72 data we prefered to copy the max Production of 3 days ago. 
+```{r}
+for (i in (nrow(deneme2)-71):nrow(deneme2)){
+  deneme2$maxPro[i]=deneme2$maxPro[i-72]
+  deneme2$trend[i]=i
+}
+
+```
+
+
+## Basic Linear Regression Model
+```{r}
+merged <-deneme2
+merged <- as.data.frame(merged)
+modified <- subset(merged,select=-c(maxPro,dayHour,production))
+lm1<-lm(utilization~.,modified)
+summary(lm1)
+```
+
+
+## Taking Averages 
+```{r}
+avgmerged <- as.data.table(merged) 
+
+avgmerged$avgCLOUD <- (merged$CLOUD_LOW_LAYER_36.25_33+merged$CLOUD_LOW_LAYER_36.25_33.25+merged$CLOUD_LOW_LAYER_36.25_33.5+merged$CLOUD_LOW_LAYER_36.5_33+merged$CLOUD_LOW_LAYER_36.5_33.25+merged$CLOUD_LOW_LAYER_36.5_33.5+merged$CLOUD_LOW_LAYER_36.75_33+merged$CLOUD_LOW_LAYER_36.75_33.25+merged$CLOUD_LOW_LAYER_36.75_33.5)/9
+
+avgmerged$avgTEMP<- (merged$TEMP_36.25_33+merged$TEMP_36.25_33.25+merged$TEMP_36.25_33.5+merged$TEMP_36.5_33+merged$TEMP_36.5_33.25+merged$TEMP_36.5_33.5+merged$TEMP_36.75_33+merged$TEMP_36.75_33.25+merged$TEMP_36.75_33.5)/9
+
+avgmerged$avgHUM<- (merged$REL_HUMIDITY_36.25_33+merged$REL_HUMIDITY_36.25_33.25+merged$REL_HUMIDITY_36.25_33.5+merged$REL_HUMIDITY_36.5_33+merged$REL_HUMIDITY_36.5_33.25+merged$REL_HUMIDITY_36.5_33.5+merged$REL_HUMIDITY_36.75_33+merged$REL_HUMIDITY_36.75_33.25+merged$REL_HUMIDITY_36.75_33.5)/9
+
+avgmerged$avgDSWRF<- (merged$DSWRF_36.25_33+merged$DSWRF_36.25_33.25+merged$DSWRF_36.25_33.5+merged$DSWRF_36.5_33+merged$DSWRF_36.5_33.25+merged$DSWRF_36.5_33.5+merged$DSWRF_36.75_33+merged$DSWRF_36.75_33.25+merged$DSWRF_36.75_33.5)/9
+
+
+```
+
+## Adding weekday, month and trend as new columns
+```{r}
+avgmerged[,w_day:=as.character(wday(date,label=T))]
+avgmerged[,mon:=as.character(month(date,label=T))]
+avgmerged[,trend:=1:.N]
+```
+
+## Adding Lag Utilizations
+We added lag 72 for utilization because clearly it has a high autocorrelation in a period of 24 due to hours as you can see from the below graph and we are not able to reach the lag24 since we are predicting 72 rows ahead. 
+
+## ACF
+
+```{r}
+acf(avgmerged$production,na.action = na.pass)
+```
+
+Also we prefered to add lag 73 since normally lag 1 is highly correlated and closes we can get is lag 73. \
+We also added weekly (168), monthly (720) lag as well as 15 day since we observed that within 15 day periods production is tend to increase once in a while. 
+
+```{r}
+avgmerged[,lag72_u:=shift(merged$utilization,24*3)]
+avgmerged[,lag360_u:=shift(merged$utilization,24*15)]
+avgmerged[,lag73_u:=shift(merged$utilization,24*3+1)]
+avgmerged[,lag168_u:=shift(merged$utilization,168)]
+avgmerged[,lag1_u:=shift(merged$utilization,1)]
+avgmerged[,lag24_u:=shift(merged$utilization,24)]
+avgmerged[,lag720_u:=shift(merged$utilization,720)]
+
+avgmerged <- as.data.table(avgmerged)
+```
+# Model 1
+The model 1 is the basic model. It only includes the hour and date.
+```{r}
+lm1 <- lm(production~hour+date,avgmerged)
+summary(lm1)
+
+
+
+```
+
+# Model 2 
+Model 2 invvludes the average values hour and date. 
+```{r}
+lm2 <- lm(production~avgHUM+avgTEMP+avgCLOUD+avgDSWRF+hour+date,avgmerged)
+summary(lm2)
+
+
+
+```
+
+# Model 3
+In model 3 we tried to observe if deleting one of the average values improve the model or not. 
+```{r}
+lm3 <- lm(production~avgHUM+avgTEMP+avgDSWRF+hour+date,avgmerged)
+summary(lm3)
+```
+
+# Model 4
+In model 4 instead of adding the averages we tried to add all the variables individually to see the effect. 
+```{r}
+lm4 <- lm(production~trend+TEMP_36.75_33.5+TEMP_36.75_33.25+TEMP_36.75_33+TEMP_36.5_33.25+TEMP_36.5_33+TEMP_36.25_33.25+TEMP_36.25_33+REL_HUMIDITY_36.75_33.5+REL_HUMIDITY_36.75_33.25+REL_HUMIDITY_36.75_33+REL_HUMIDITY_36.5_33.5+REL_HUMIDITY_36.25_33.5+REL_HUMIDITY_36.25_33+DSWRF_36.75_33.5+DSWRF_36.75_33.5+DSWRF_36.5_33.5+DSWRF_36.75_33+DSWRF_36.5_33.5+CLOUD_LOW_LAYER_36.75_33.5+CLOUD_LOW_LAYER_36.25_33+CLOUD_LOW_LAYER_36.25_33.5 +CLOUD_LOW_LAYER_36.25_33.25+CLOUD_LOW_LAYER_36.5_33 +hour+date,merged)
+summary(lm4)
+
+```
+
+# Model 5
+With model 5 we added the lag values for lag 1 week, the latest data we can get and one before. Which ended up with 80 percent R value. 
+```{r}
+lm5 <- lm(utilization~avgTEMP+avgHUM+avgDSWRF+lag168_u+avgCLOUD+hour+lag72_u+lag73_u,avgmerged)
+summary(lm5)
+
+```
+# Model 6
+We observe the effect of deleting the 1 week lag data.
+```{r}
+lm6 <- lm(utilization~avgTEMP+avgHUM+avgDSWRF+avgCLOUD+hour+lag72_u+lag73_u,avgmerged)
+summary(lm6)
+
+```
+Model 5 happens to be the best model among the above 5. So we decided to predict with this model at first. 
+
+
+# Interpretation of the models 
+## We tried to observe what we get
+```{r}
+
+avgmerged[,predicted_reg:=predict(lm5,avgmerged)]
+avgmerged$predicted_reg 
+checkresiduals(lm5)
+ggplot(avgmerged[(11232-30*24):11232],aes(y=utilization,x=trend))+ geom_line()+
+  geom_line(aes(y=predicted_reg, col="red"))
+```
+
+
+
+
+## Negative and Invalid results
+We eliminated the negative predictions and equalized them 0. 
+```{r}
+for (i in 1:nrow(merged)){
+  if (!is.na(avgmerged$predicted_reg[i]) && avgmerged$predicted_reg[i] <= 0){
+    avgmerged$predicted_reg[i] = 0}
+}
+```
+
+
+
+
+## Non-productive hours
+We observe that there is no production during 21:00-04:00 since there is no sun arround whole year in thpse times so we are directly equalizing them to 0. 
+```{r}
+for (i in 1:nrow(merged)){
+  if ((avgmerged$hour[i]==0) || (avgmerged$hour[i]==1) ||(avgmerged$hour[i]==2) ||(avgmerged$hour[i]==3) ||(avgmerged$hour[i]==4) ||(avgmerged$hour[i]==21) ||(avgmerged$hour[i]==22)||(avgmerged$hour[i]==23)){
+    avgmerged$predicted[i] = 0}
+}
+
+```
+
+## Better Predictions
+As we eliminated negative predictions and we equalized production to 0 during 21:00-04:00 predictions look better
+```{r}
+ggplot(avgmerged[(11232-30*24):11232],aes(y=utilization,x=trend))+ geom_line()+
+  geom_line(aes(y=predicted, col="red"))
+
+
+```
+
+
+
+# Predicting
+```{r}
+
+
+LastDay=avgmerged[(nrow(avgmerged)-23):nrow(avgmerged),
+                  c("avgTEMP","avgHUM","avgDSWRF","lag168_u","avgCLOUD","hour","lag72_u","lag73_u")]
+
+LastDay=as.data.frame(LastDay)
+prediction = c(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0)
+for(i in 1:24) {
+  prediction[i] = predict(lm5,newdata=LastDay[i,])
+  if(i==1 || i==2 ||i==3 || i==4 || i==5 || i==22 ||i==23 || i==24){
+    prediction[i]=0
+  }
+}
+prediction
+
+maxPros=avgmerged[(nrow(avgmerged)-23):nrow(avgmerged)]$maxPro
+
+maxPros
+
+theEnd=c(0,24)
+for(i in 1:24) {
+  theEnd[i]=prediction[i]*maxPros[i]/100
+}
+theEnd
+
+```
+
+The utilization data is differenced with 72 hour lagged values. \
+This is done to achieve stationarity. \
+72 is chosen sincedaily seasonality is apparent in data and the last data point we have to predict is 72 data point prior.\
+```{r}
+avgmerged[,differ:=utilization-shift(utilization,72)]
+ggplot(data=avgmerged, aes(x=trend, y=differ))+geom_point()
+head(avgmerged$trend,100)
+```
+The visual iinspection seems statitonary.\
+
+## KPSS Test for Stationarity
+```{r}
+kpss= ur.kpss(avgmerged$differ)
+summary(kpss)
+acf(avgmerged[complete.cases(avgmerged)]$differ)
+pacf(avgmerged[complete.cases(avgmerged)]$differ)
+
+
+```
+Kpss test does not reject the stationarity hypothesis in any level of significance.\
+Acf and pacf does suggest a (p,0,0) might explain the model well. Since the acf graph resembles
+Sinusodial and pacf has one significant spike and that's it.\
+
+# Arima Model 
+```{r}
+fitted=auto.arima(avgmerged$differ,seasonal=F,trace=T,stepwise=F,approximation=F)
+checkresiduals(fitted)
+
+```
+auto.arima found ARIMA(2,0,1) as the model best describing the data.\
+The residuals does look like iid with 0 mean and constant variance.\
+Regression predictions are modeled with the actual values.\
+## Arima Forecast 
+```{r}
+ggplot(avgmerged[(11232-30*24):11232],aes(y=utilization,x=trend))+ geom_line()+
+  geom_line(aes(y=predicted_reg, col="red"))
+forecasted=forecast(fitted,h=576)
+forecasted
+
+```
+Arima forecasts. Note that here the model does not predict the actual utilizations but their difference
+previous 72 hour values. \
+Test dates are selected which are between 01-05-22 and 24-05-22 and the predictions are recorded.\
+
+
+```{r}
+
+temporary=copy(avgmerged)
+test=avgmerged[9289:9864]
+test$Date=avgmerged$Date+c(9289:9864)
+test[,predicted_differ:=as.numeric(forecasted$mean)]
+temporary=rbindlist(list(temporary,test),fill=T,use.names=T)
+temporary[is.na(predicted_differ),predicted_differ:=differ] 
+
+```
+
+```{r}
+
+temporary[,forecastval:=predicted_differ+shift(utilization,72)]
+head(temporary,24)
+temporary <- temporary[9289:9864]
+```
+With the help of shift function the difference predictions are converted to the utilization predictions.
+
+## MAD values 
+```{r}
+mad_reg <- mad(temporary$utilization,temporary$predicted_reg)
+mad_arima <- mad(temporary$utilization,temporary$predicted_differ)
+
+```
+MAD values are calculated.
+
+# RESULTS
+
+	The two models have been compared using a test date between 01-05-2022 and 24-05-2022. The models made their predictions and then the residuals have been compared using mean absolute deviation. MAPE wasn’t chosen, since there many data points at night where the production was 0 and MAPE doesn’t work when the actual value is 0, even for one realization and the data at hand had many. The resulting MADs are 5.5% for ARIMA model and 15.72% for regression model. Based on this performance measure, ARIMA(2,0,1) to the differenced utilizations has been chosen as the model that is predicting the best.    
+
+# CONCLUSION AND FUTURE WORK
+
+	 The approach used in this model is fit for a data this size and complex. Another approach to go might have been to disregard the data prior to government intervention or dividing the data by hour and coming up with 24 different models. First has been rejected since the data lost would vast and the second has been rejected since the previous hours is carrying some information as can be seen from the regression model. The 73-hour lag, which one hour previous of the prediction houri was very significant while fitting a regression model. Finally, a differenced ARIMA(2,0,1) is chosen to represent the data.
+
+# References
+
+[Kıvanç Enerji](https://www.kivancenerji.com.tr/kivanc2ges.html)
+[Enerji Atlası](https://www.enerjiatlasi.com/gunes/kivanc-2-ges.html)
